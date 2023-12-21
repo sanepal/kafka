@@ -777,6 +777,11 @@ public abstract class AbstractCoordinator implements Closeable {
         public void handle(SyncGroupResponse syncResponse,
                            RequestFuture<ByteBuffer> future) {
             Errors error = syncResponse.error();
+            boolean shouldRejoinOnSync = BugReplicator.instance.shouldRejoinOnSync();
+            if (shouldRejoinOnSync) {
+                log.info("Explicitly re-joining to trigger orphaned locks");
+                future.raise(error == Errors.NONE ? Errors.REBALANCE_IN_PROGRESS : error);
+            }
             if (error == Errors.NONE) {
                 if (isProtocolTypeInconsistent(syncResponse.data().protocolType())) {
                     log.error("SyncGroup failed due to inconsistent Protocol Type, received {} but expected {}",

@@ -353,6 +353,7 @@ public class StateDirectory {
                 return true;
             } else {
                 // another thread owns the lock
+                log.info("{} Couldn't lock {} because {} is the current owner", logPrefix(), taskId, lockOwner.getName());
                 return false;
             }
         } else if (!stateDir.exists()) {

@@ -23,6 +23,7 @@ import org.apache.kafka.clients.admin.MemberToRemove;
 import org.apache.kafka.clients.admin.RemoveMembersFromConsumerGroupOptions;
 import org.apache.kafka.clients.admin.RemoveMembersFromConsumerGroupResult;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.internals.BugReplicator;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.common.Metric;
 import org.apache.kafka.common.MetricName;
@@ -1302,7 +1303,9 @@ public class KafkaStreams implements AutoCloseable {
             stateDirCleaner.scheduleAtFixedRate(() -> {
                 // we do not use lock here since we only read on the value and act on it
                 if (state == State.RUNNING) {
+                    try {  BugReplicator.instance.waitOnJoinRequest(); } catch (InterruptedException ex) {}
                     stateDirectory.cleanRemovedTasks(cleanupDelay);
+                    BugReplicator.instance.notifyCleanupComplete();
                 }
             }, cleanupDelay, cleanupDelay, TimeUnit.MILLISECONDS);
 

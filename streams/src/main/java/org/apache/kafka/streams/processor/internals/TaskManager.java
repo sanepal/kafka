@@ -23,6 +23,7 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.clients.consumer.internals.BugReplicator;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.Metric;
 import org.apache.kafka.common.MetricName;
@@ -1160,9 +1161,11 @@ public class TaskManager {
     private void tryToLockAllNonEmptyTaskDirectories() {
         // Always clear the set at the beginning as we're always dealing with the
         // current set of actually-locked tasks.
+        log.info("Clearing lockedTaskDirectories with lockedTasks: {}", lockedTaskDirectories.stream().map(TaskId::toString).collect(Collectors.joining(",")));
         lockedTaskDirectories.clear();
 
         for (final TaskDirectory taskDir : stateDirectory.listNonEmptyTaskDirectories()) {
+            try {  BugReplicator.instance.waitOnCleanupThread(); } catch (InterruptedException ex) {}
             final File dir = taskDir.file();
             final String namedTopology = taskDir.namedTopology();
             try {
@@ -1177,6 +1180,7 @@ public class TaskManager {
                 // ignore any unknown files that sit in the same directory
             }
         }
+        log.info("Updated lockedTaskDirectories with lockedTasks: {}", lockedTaskDirectories.stream().map(TaskId::toString).collect(Collectors.joining(",")));
     }
 
     /**
