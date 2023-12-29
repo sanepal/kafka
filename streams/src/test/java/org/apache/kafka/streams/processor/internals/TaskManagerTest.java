@@ -1528,12 +1528,28 @@ public class TaskManagerTest {
     public void shouldTryToLockValidTaskDirsAtRebalanceStart() throws Exception {
         expectLockObtainedFor(taskId01);
         expectLockFailedFor(taskId10);
+        expectDirectoryNotEmpty(taskId01);
 
         makeTaskFolders(
             taskId01.toString(),
             taskId10.toString(),
             "dummy"
         );
+        replay(stateDirectory);
+        taskManager.handleRebalanceStart(singleton("topic"));
+
+        verify(stateDirectory);
+        assertThat(taskManager.lockedTaskDirectories(), is(singleton(taskId01)));
+    }
+
+    @Test
+    public void shouldUnlockEmptyDirsAtRebalanceStart() throws Exception {
+        expectLockObtainedFor(taskId01, taskId10);
+        expectDirectoryNotEmpty(taskId01);
+        expect(stateDirectory.directoryForTaskIsEmpty(taskId10)).andReturn(true);
+        expectUnlockFor(taskId10);
+
+        makeTaskFolders(taskId01.toString(), taskId10.toString());
         replay(stateDirectory);
         taskManager.handleRebalanceStart(singleton("topic"));
 
@@ -1574,6 +1590,7 @@ public class TaskManagerTest {
     @Test
     public void shouldReleaseLockForUnassignedTasksAfterRebalance() throws Exception {
         expectLockObtainedFor(taskId00, taskId01, taskId02);
+        expectDirectoryNotEmpty(taskId00, taskId01, taskId02);
         expectUnlockFor(taskId02);
 
         makeTaskFolders(
@@ -1632,6 +1649,7 @@ public class TaskManagerTest {
     private void computeOffsetSumAndVerify(final Map<TopicPartition, Long> changelogOffsets,
                                            final Map<TaskId, Long> expectedOffsetSums) throws Exception {
         expectLockObtainedFor(taskId00);
+        expectDirectoryNotEmpty(taskId00);
         makeTaskFolders(taskId00.toString());
         replay(stateDirectory);
 
@@ -1655,6 +1673,7 @@ public class TaskManagerTest {
         final Map<TaskId, Long> expectedOffsetSums = mkMap(mkEntry(taskId00, 15L));
 
         expectLockObtainedFor(taskId00);
+        expectDirectoryNotEmpty(taskId00);
         makeTaskFolders(taskId00.toString());
         replay(stateDirectory);
 
@@ -1755,6 +1774,7 @@ public class TaskManagerTest {
     public void shouldNotReportOffsetSumsAndReleaseLockForUnassignedTaskWithoutCheckpoint() throws Exception {
         expectLockObtainedFor(taskId00);
         makeTaskFolders(taskId00.toString());
+        expectDirectoryNotEmpty(taskId00);
         expect(stateDirectory.checkpointFileFor(taskId00)).andReturn(getCheckpointFile(taskId00));
         replay(stateDirectory);
         taskManager.handleRebalanceStart(singleton("topic"));
@@ -1872,6 +1892,7 @@ public class TaskManagerTest {
 
         makeTaskFolders(taskId00.toString(), taskId01.toString());
         expectLockObtainedFor(taskId00, taskId01);
+        expectDirectoryNotEmpty(taskId00, taskId01);
 
         // The second attempt will return empty tasks.
         makeTaskFolders();
@@ -3586,7 +3607,8 @@ public class TaskManagerTest {
         final StateMachineTask task00 = new StateMachineTask(taskId00, taskId00Partitions, true);
         final StateMachineTask task01 = new StateMachineTask(taskId01, taskId01Partitions, false);
 
-        makeTaskFolders(taskId00.toString(), task01.toString());
+        makeTaskFolders(taskId00.toString(), taskId01.toString());
+        expectDirectoryNotEmpty(taskId00, taskId01);
         expectLockObtainedFor(taskId00, taskId01);
         expectRestoreToBeCompleted(consumer, changeLogReader);
         expect(activeTaskCreator.createTasks(anyObject(), eq(taskId00Assignment)))
@@ -4387,6 +4409,12 @@ public class TaskManagerTest {
         }
     }
 
+    private void expectDirectoryNotEmpty(final TaskId... tasks) {
+        for (final TaskId taskId : tasks) {
+            expect(stateDirectory.directoryForTaskIsEmpty(taskId)).andReturn(false);
+        }
+    }
+
     private static void expectConsumerAssignmentPaused(final Consumer<byte[], byte[]> consumer) {
         final Set<TopicPartition> assignment = singleton(new TopicPartition("assignment", 0));
         expect(consumer.assignment()).andReturn(assignment);
@@ -4698,6 +4726,7 @@ public class TaskManagerTest {
         Files.createFile(checkpointFile.toPath());
         new OffsetCheckpoint(checkpointFile).write(offsets);
         expect(stateDirectory.checkpointFileFor(task)).andReturn(checkpointFile);
+        expectDirectoryNotEmpty(task);
     }
 
     private File getCheckpointFile(final TaskId task) {

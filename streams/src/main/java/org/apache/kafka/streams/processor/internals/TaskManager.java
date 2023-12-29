@@ -1167,10 +1167,21 @@ public class TaskManager {
             final String namedTopology = taskDir.namedTopology();
             try {
                 final TaskId id = parseTaskDirectoryName(dir.getName(), namedTopology);
-                if (stateDirectory.lock(id)) {
-                    lockedTaskDirectories.add(id);
-                    if (!tasks.contains(id)) {
-                        log.debug("Temporarily locked unassigned task {} for the upcoming rebalance", id);
+                boolean lockedEmptyDirectory = false;
+                try {
+                    if (stateDirectory.lock(id)) {
+                        if (stateDirectory.directoryForTaskIsEmpty(id)) {
+                            lockedEmptyDirectory = true;
+                        } else {
+                            lockedTaskDirectories.add(id);
+                            if (!tasks.contains(id)) {
+                                log.debug("Temporarily locked unassigned task {} for the upcoming rebalance", id);
+                            }
+                        }
+                    }
+                } finally {
+                    if (lockedEmptyDirectory) {
+                        stateDirectory.unlock(id);
                     }
                 }
             } catch (final TaskIdFormatException e) {
